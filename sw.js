@@ -1,4 +1,4 @@
-const CACHE_NAME = 'archive-20250511';
+const CACHE_NAME = 'archive-20250511b';
 const ASSETS = [
   './',
   './index.html',
@@ -24,23 +24,20 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// 요청 가로채기: 캐시 우선, 없으면 네트워크
+// 요청 가로채기: 네트워크 우선, 실패 시 캐시
 self.addEventListener('fetch', event => {
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      if (cached) return cached;
-      return fetch(event.request).then(response => {
-        // 유효한 응답만 캐싱
-        if (!response || response.status !== 200 || response.type === 'opaque') {
-          return response;
-        }
-        const toCache = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, toCache));
+    fetch(event.request).then(response => {
+      if (!response || response.status !== 200 || response.type === 'opaque') {
         return response;
-      });
+      }
+      const toCache = response.clone();
+      caches.open(CACHE_NAME).then(cache => cache.put(event.request, toCache));
+      return response;
     }).catch(() => {
-      // 오프라인 fallback
-      return caches.match('./index.html');
+      return caches.match(event.request).then(cached => {
+        return cached || caches.match('./index.html');
+      });
     })
   );
 });
