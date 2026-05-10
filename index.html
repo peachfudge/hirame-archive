@@ -58,7 +58,8 @@
   /* FILTER */
   .filter-row { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
   .filter-chip { padding: 6px 14px; border-radius: 20px; border: none; font-size: 12px; cursor: pointer; font-family: inherit; }
-  .tag-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 12px; }
+  .tag-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-top: 12px; scrollbar-width: none; }
+  .tag-scroll::-webkit-scrollbar { display: none; }
   .tag-inner { display: flex; gap: 8px; padding-bottom: 4px; width: max-content; }
   .tag-filter { padding: 5px 13px; border-radius: 20px; border: none; font-size: 12px; cursor: pointer; white-space: nowrap; font-family: inherit; }
 
@@ -188,7 +189,8 @@ const GRADIENT_OFFSETS = [
   ['var(--c-sub)', 'var(--c-bg-chip)'],
 ];
 const gradientFor = (id) => {
-  const [a, b] = GRADIENT_OFFSETS[id % GRADIENT_OFFSETS.length];
+  const num = typeof id === 'number' ? id : Number(String(id).slice(-6));
+  const [a, b] = GRADIENT_OFFSETS[num % GRADIENT_OFFSETS.length];
   return `linear-gradient(135deg, ${a} 0%, ${b} 100%)`;
 };
 
@@ -1103,6 +1105,14 @@ function attachEvents() {
     btn.addEventListener('click', () => {
       state.form.status = btn.dataset.statusPick;
       render();
+    });
+  });
+
+  // 통계 박스
+  app.querySelectorAll('[data-stat-key]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const val = btn.dataset.statKey;
+      setState({ selectedStat: state.selectedStat === val ? null : val });
     });
   });
 
