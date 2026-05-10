@@ -189,9 +189,7 @@ const GRADIENT_OFFSETS = [
   ['var(--c-muted)', 'var(--c-grad-light)'],
 ];
 const gradientFor = (id) => {
-  const s = String(id);
-  const num = s.charCodeAt(s.length - 1) + s.charCodeAt(s.length - 2);
-  const [a, b] = GRADIENT_OFFSETS[num % GRADIENT_OFFSETS.length];
+  const [a, b] = GRADIENT_OFFSETS[Number(id) % GRADIENT_OFFSETS.length];
   return `linear-gradient(135deg, ${a} 0%, ${b} 100%)`;
 };
 
