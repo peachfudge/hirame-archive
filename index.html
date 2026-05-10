@@ -183,13 +183,13 @@ const STATUS_COLORS = { '청취완료': STATUS_COLOR, '청취중': STATUS_COLOR,
 // 카드 악센트 그라데이션 - 모두 CSS 변수 기반으로 테마 따라감
 const GRADIENT_OFFSETS = [
   ['var(--c-sub)', 'var(--c-primary)'],
-  ['var(--c-primary)', 'var(--c-grad-light)'],
-  ['var(--c-grad-light)', 'var(--c-sub)'],
-  ['var(--c-border)', 'var(--c-primary)'],
-  ['var(--c-muted)', 'var(--c-grad-light)'],
+  ['var(--c-primary)', 'var(--c-body)'],
+  ['var(--c-body)', 'var(--c-sub)'],
+  ['var(--c-sub)', 'var(--c-body)'],
+  ['var(--c-primary)', 'var(--c-sub)'],
 ];
-const gradientFor = (id) => {
-  const [a, b] = GRADIENT_OFFSETS[Number(id) % GRADIENT_OFFSETS.length];
+const gradientFor = (idx) => {
+  const [a, b] = GRADIENT_OFFSETS[idx % GRADIENT_OFFSETS.length];
   return `linear-gradient(135deg, ${a} 0%, ${b} 100%)`;
 };
 
@@ -760,13 +760,13 @@ function filterCDs(cds) {
 
 
 // ── 카드 HTML 생성 (renderLibrary + 검색 재렌더 공유) ───
-function cardHTML(cd) {
+function cardHTML(cd, idx) {
   const sc = STATUS_COLORS[cd.status];
   const visibleTags = cd.tags.slice(0,3).map(t=>`<span class="card-tag">#${t}</span>`).join('');
   const more = cd.tags.length > 3 ? `<span class="card-tag">+${cd.tags.length-3}</span>` : '';
   return `
     <div class="card" data-open="${cd.id}">
-      <div class="card-accent" style="background:${gradientFor(cd.id)}"></div>
+      <div class="card-accent" style="background:${gradientFor(idx)}"></div>
       <div class="card-info">
         <div class="card-title">${esc(cd.title)}</div>
         <div class="card-circle">✦ ${esc(cd.circle)}</div>
@@ -825,7 +825,7 @@ function renderLibrary() {
     { key: 'purchased', num: cds.filter(c => !!c.purchaseDate).length, label: '구매', color: 'var(--c-body)' },
   ];
 
-  const cards = filtered.length === 0 ? EMPTY_HTML : filtered.map(cardHTML).join('');
+  const cards = filtered.length === 0 ? EMPTY_HTML : filtered.map((cd, i) => cardHTML(cd, i)).join('');
 
   return `
     <div class="header">
@@ -1038,7 +1038,7 @@ function attachEvents() {
       const cardList = document.querySelector('.card-list');
       if (cardList) {
         const filtered = filterCDs(state.cds);
-        cardList.innerHTML = filtered.length === 0 ? EMPTY_HTML : filtered.map(cardHTML).join('');
+        cardList.innerHTML = filtered.length === 0 ? EMPTY_HTML : filtered.map((cd, i) => cardHTML(cd, i)).join('');
         // 새로 생긴 카드 이벤트 재연결
         attachCardEvents(cardList);
       }
