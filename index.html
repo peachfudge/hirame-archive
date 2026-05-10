@@ -182,10 +182,14 @@ const STATUS_COLOR = { bg: 'var(--c-bg-chip)', text: 'var(--c-primary)' };
 const STATUS_COLORS = { '청취완료': STATUS_COLOR, '청취중': STATUS_COLOR, '미청취': STATUS_COLOR };
 // 카드 악센트 그라데이션 - 모두 CSS 변수 기반으로 테마 따라감
 const GRADIENT_OFFSETS = [
-  ['var(--c-sub)', 'var(--c-primary)'],
-  ['var(--c-primary)', 'var(--c-grad-light)'],
-  ['var(--c-grad-light)', 'var(--c-sub)'],
+  ['var(--c-border)', 'var(--c-primary)'],
+  ['var(--c-primary)', 'var(--c-border)'],
   ['var(--c-border)', 'var(--c-sub)'],
+  ['var(--c-sub)', 'var(--c-border)'],
+  ['var(--c-primary)', 'var(--c-bg-chip)'],
+  ['var(--c-bg-chip)', 'var(--c-primary)'],
+  ['var(--c-sub)', 'var(--c-bg-chip)'],
+  ['var(--c-bg-chip)', 'var(--c-sub)'],
 ];
 const gradientFor = (idx) => {
   const [a, b] = GRADIENT_OFFSETS[idx % GRADIENT_OFFSETS.length];
