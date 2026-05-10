@@ -36,7 +36,7 @@
   #app { width: 100%; max-width: 430px; padding: 0 16px; }
 
   /* HEADER */
-  .header { display: flex; justify-content: space-between; align-items: center; padding-top: 52px; padding-bottom: 8px; }
+  .header { display: flex; justify-content: space-between; align-items: center; padding-top: max(20px, env(safe-area-inset-top)); padding-bottom: 8px; }
   .header-sub { font-size: 12.5px; color: var(--c-muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: -4px; }
   .header-title { font-size: 26px; font-weight: 800; color: var(--c-primary); }
   .add-btn {
@@ -89,7 +89,7 @@
   .empty { text-align: center; color: var(--c-sub); padding: 48px 0; font-size: 15px; }
 
   /* DETAIL */
-  .top-bar { display: flex; justify-content: space-between; align-items: stretch; padding-top: 52px; padding-bottom: 16px; gap: 10px; }
+  .top-bar { display: flex; justify-content: space-between; align-items: stretch; padding-top: max(20px, env(safe-area-inset-top)); padding-bottom: 16px; gap: 10px; }
   .nav-btn {
     background: var(--c-bg-card); color: var(--c-body);
     border: none; border-radius: 16px;
@@ -118,7 +118,8 @@
 
   /* STARS */
   .stars { display: flex; gap: 2px; }
-  .star { cursor: pointer; line-height: 1; user-select: none; }
+  .star { line-height: 1; user-select: none; }
+  .star[data-star] { cursor: pointer; }
 
   /* ADD FORM */
   .add-page-title { font-size: 16px; font-weight: 700; color: var(--c-primary); }
@@ -176,11 +177,8 @@
 
 <script>
 // ── 상수 ──────────────────────────────────────────────
-const STATUS_COLORS = {
-  '청취완료': { bg: 'var(--c-bg-chip)', text: 'var(--c-primary)' },
-  '청취중':   { bg: 'var(--c-bg-chip)', text: 'var(--c-primary)' },
-  '미청취':   { bg: 'var(--c-bg-chip)', text: 'var(--c-primary)' },
-};
+const STATUS_COLOR = { bg: 'var(--c-bg-chip)', text: 'var(--c-primary)' };
+const STATUS_COLORS = { '청취완료': STATUS_COLOR, '청취중': STATUS_COLOR, '미청취': STATUS_COLOR };
 // 카드 악센트 그라데이션 - 모두 CSS 변수 기반으로 테마 따라감
 const GRADIENT_OFFSETS = [
   ['var(--c-sub)', 'var(--c-primary)'],
@@ -195,7 +193,6 @@ const gradientFor = (id) => {
 };
 
 
-const STORAGE_KEY = 'hirame_cds';
 const TITLE_KEY = 'hirame-title';
 const SUBTITLE_KEY = 'hirame-subtitle';
 
@@ -277,7 +274,6 @@ function rowToCD(row) {
     memo: row.memo || '',
     status: row.status || '미청취',
     rating: row.rating || 0,
-    favorite: false
   };
 }
 
@@ -286,8 +282,7 @@ async function dbLoadCDs() {
     const rows = await supaFetch('GET', 'cds?order=created_at.desc');
     return Array.isArray(rows) ? rows.map(rowToCD) : [];
   } catch(e) {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    return [];
   }
 }
 
@@ -320,31 +315,9 @@ function loadSubtitle() {
   try { return localStorage.getItem(SUBTITLE_KEY) || 'Audio Drama Library'; } catch(e) { return 'Audio Drama Library'; }
 }
 
-// ── localStorage ──────────────────────────────────────
-function loadCDs() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch(e) {}
-  return [];
-}
-function saveCDs(cds) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cds)); } catch(e) {}
-}
 
 // ── 인증 ──────────────────────────────────────────────
-async function sha256(str) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(str);
-  const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
 async function verifyPassword(input) {
-  // Edge Function에 비번 검증을 맡김 (더미 insert 아님, insert 1건으로 검증)
-  // 실제 검증은 빈 요청으로 확인: action='insert'에 pw만 보내고 payload 검사
-  // 대신 임시 verify 전용 action 사용
   try {
     const res = await fetch(EDGE_WRITE_URL, {
       method: 'POST',
@@ -407,7 +380,7 @@ function openAuthModal() {
 
 
 let state = {
-  cds: loadCDs(),
+  cds: [],
   view: 'library',
   selectedId: null,
   _sessionPassword: null,  // Edge Function 호출 시 사용, 메모리에만 존재
@@ -600,7 +573,6 @@ function openThemeModal() {
       }, 2500);
     } else {
       clearTimeout(resetTimer);
-      localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(THEME_HISTORY_KEY);
       localStorage.removeItem(THEME_CURRENT_KEY);
       localStorage.removeItem(TITLE_KEY);
@@ -655,7 +627,6 @@ async function handleAdd() {
       purchaseDate: f.purchaseDate || '',
       purchaseLink,
       memo: f.memo || '',
-      favorite: false,
       status: f.status || '미청취',
       rating: f.rating || 0,
     };
@@ -768,24 +739,60 @@ function render() {
   attachEvents();
 }
 
-// ── LIBRARY ──────────────────────────────────────────
-function renderLibrary() {
-  const { cds, filterTag, filterStatus, filterRating, searchQuery } = state;
-  const allTags = [...new Set(cds.flatMap(c => c.tags))];
-  const { selectedStat } = state;
-  const filtered = cds.filter(cd => {
-    const matchTag = filterTag ? cd.tags.includes(filterTag) : true;
-    const matchStatus = filterStatus ? cd.status === filterStatus : true;
-    const matchRating = filterRating !== null ? cd.rating === filterRating : true;
+
+// ── 필터 로직 (renderLibrary + 검색 이벤트 공유) ────────
+function filterCDs(cds) {
+  const { filterTag, filterStatus, filterRating, searchQuery, selectedStat } = state;
+  return cds.filter(cd => {
+    const matchTag    = filterTag     ? cd.tags.includes(filterTag)                      : true;
+    const matchStatus = filterStatus  ? cd.status === filterStatus                       : true;
+    const matchRating = filterRating !== null ? cd.rating === filterRating               : true;
     const matchSearch = !searchQuery
       || cd.title.toLowerCase().includes(searchQuery.toLowerCase())
       || cd.circle.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchStat = !selectedStat
-      || (selectedStat === 'all')
+    const matchStat   = !selectedStat || selectedStat === 'all'
       || (selectedStat === 'done' && cd.status === '청취완료')
-      || (selectedStat === 'fav' && cd.favorite);
+      || (selectedStat === 'purchased' && !!cd.purchaseDate);
     return matchTag && matchStatus && matchRating && matchSearch && matchStat;
   });
+}
+
+
+// ── 카드 HTML 생성 (renderLibrary + 검색 재렌더 공유) ───
+function cardHTML(cd) {
+  const sc = STATUS_COLORS[cd.status];
+  const visibleTags = cd.tags.slice(0,3).map(t=>`<span class="card-tag">#${t}</span>`).join('');
+  const more = cd.tags.length > 3 ? `<span class="card-tag">+${cd.tags.length-3}</span>` : '';
+  return `
+    <div class="card" data-open="${cd.id}">
+      <div class="card-accent" style="background:${gradientFor(cd.id)}"></div>
+      <div class="card-info">
+        <div class="card-title">${esc(cd.title)}</div>
+        <div class="card-circle">✦ ${esc(cd.circle)}</div>
+        <div class="card-tags">${visibleTags}${more}</div>
+        <div style="margin-top:5px">${starsHTML(cd.rating, 13, false, `card-${cd.id}`)}</div>
+      </div>
+      <div class="card-right">
+        <span class="card-status" style="background:var(--c-bg-chip);color:${cd.purchaseDate?'var(--c-primary)':'var(--c-muted)'}">${cd.purchaseDate?'구매':'미구매'}</span>
+        <span class="card-status" style="background:${sc.bg};color:${sc.text}">${cd.status}</span>
+      </div>
+    </div>`;
+}
+
+const EMPTY_HTML = `<div class="empty">작품이 없어요 <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--c-sub)" stroke="none" style="display:inline;vertical-align:middle;margin-left:2px"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div>`;
+
+// ── LIBRARY ──────────────────────────────────────────
+function renderLibrary() {
+  if (state._loading) {
+    return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:14px">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--c-primary)" stroke-width="2" stroke-linecap="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/></path></svg>
+      <div style="font-size:13px;color:var(--c-muted)">불러오는 중...</div>
+    </div>`;
+  }
+  const { cds, filterTag, filterStatus, filterRating, searchQuery } = state;
+  const allTags = [...new Set(cds.flatMap(c => c.tags))];
+  const { selectedStat } = state;
+  const filtered = filterCDs(cds);
 
   const statusFilters = [null, '미청취', '청취중', '청취완료'];
   const statusBtns = statusFilters.map(st => {
@@ -814,32 +821,10 @@ function renderLibrary() {
   const stats = [
     { key: 'all',  num: cds.length, label: '전체', color: 'var(--c-body)' },
     { key: 'done', num: cds.filter(c => c.status === '청취완료').length, label: '완료', color: 'var(--c-primary)' },
-    { key: 'fav',  num: cds.filter(c => c.favorite).length, label: '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:3px"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>즐겨찾기', color: 'var(--c-body)' },
+    { key: 'purchased', num: cds.filter(c => !!c.purchaseDate).length, label: '구매', color: 'var(--c-body)' },
   ];
 
-  const cards = filtered.length === 0
-    ? `<div class="empty">작품이 없어요 <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--c-sub)" stroke="none" style="display:inline;vertical-align:middle;margin-left:2px"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div>`
-    : filtered.map(cd => {
-        const sc = STATUS_COLORS[cd.status];
-        const visibleTags = cd.tags.slice(0, 3).map(t => `<span class="card-tag">#${t}</span>`).join('');
-        const more = cd.tags.length > 3 ? `<span class="card-tag">+${cd.tags.length-3}</span>` : '';
-        return `
-          <div class="card" data-open="${cd.id}">
-            <div class="card-accent" style="background:${gradientFor(cd.id)}"></div>
-            <div class="card-info">
-              <div class="card-title">${esc(cd.title)}</div>
-              <div class="card-circle">✦ ${esc(cd.circle)}</div>
-              <div class="card-tags">${visibleTags}${more}</div>
-              <div style="margin-top:5px">${starsHTML(cd.rating, 13, true, `card-${cd.id}`)}</div>
-            </div>
-            <div class="card-right">
-              <button class="card-fav" style="color:${cd.favorite?'var(--c-primary)':'var(--c-border)'}" data-fav="${cd.id}">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="${cd.favorite?'var(--c-primary)':'none'}" stroke="${cd.favorite?'var(--c-primary)':'var(--c-border)'}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-              </button>
-              <span class="card-status" style="background:${sc.bg};color:${sc.text}">${cd.status}</span>
-            </div>
-          </div>`;
-      }).join('');
+  const cards = filtered.length === 0 ? EMPTY_HTML : filtered.map(cardHTML).join('');
 
   return `
     <div class="header">
@@ -879,7 +864,6 @@ function renderLibrary() {
         const bg = active ? 'var(--c-primary)' : 'var(--c-bg-card)';
         const numColor = active ? '#fff' : s.color;
         const lblColor = active ? 'rgba(255,255,255,0.8)' : 'var(--c-sub)';
-        const fw = active ? 800 : 800;
         return `
         <button class="stat-box" style="background:${bg};cursor:pointer;border:none;font-family:inherit;" data-stat-key="${s.key}">
           <div class="stat-num" style="color:${numColor};font-weight:800">${s.num}</div>
@@ -916,7 +900,7 @@ function renderDetail() {
         <span class="status-chip" style="background:${sc.bg};color:${sc.text}">${cd.status}</span>
       </div>
       <div style="display:flex;justify-content:center;margin-top:14px">
-        ${starsHTML(cd.rating, 28, true, `detail-${cd.id}`)}
+        ${starsHTML(cd.rating, 28, false, `detail-${cd.id}`)}
       </div>
       <div class="date-row">
         <div class="date-box">
@@ -938,15 +922,16 @@ function renderDetail() {
   `;
 }
 
-// ── ADD ──────────────────────────────────────────────
-function renderAdd() {
+// ── ADD / EDIT 공통 폼 렌더 ─────────────────────────────
+function renderForm(mode) {
   const f = state.form;
+  const isEdit = mode === 'edit';
   const fields = [
-    { label: '제목 *', key: 'title', placeholder: '작품 제목', type: 'text' },
-    { label: '서클명 *', key: 'circle', placeholder: '서클 이름', type: 'text' },
-    { label: '태그', key: 'tags', placeholder: '달달, 연상, 집착 (쉼표로 구분)', type: 'text' },
-    { label: '발매일', key: 'releaseDate', placeholder: '', type: 'date' },
-    { label: '구매일', key: 'purchaseDate', placeholder: '', type: 'date' },
+    { label: '제목 *',  key: 'title',       placeholder: '작품 제목',              type: 'text' },
+    { label: '서클명 *', key: 'circle',      placeholder: '서클 이름',             type: 'text' },
+    { label: '태그',    key: 'tags',         placeholder: '달달, 연상, 집착 (쉼표로 구분)', type: 'text' },
+    { label: '발매일',  key: 'releaseDate',  placeholder: '',                       type: 'date' },
+    { label: '구매일',  key: 'purchaseDate', placeholder: '',                       type: 'date' },
   ];
   const inputsHTML = fields.map(({ label, key, placeholder, type }) => `
     <div class="form-group">
@@ -960,16 +945,14 @@ function renderAdd() {
   const statusBtns = ['미청취','청취중','청취완료'].map(st => {
     const active = f.status === st;
     const sc = STATUS_COLORS[st];
-    const bg = active ? sc.bg : 'var(--c-bg-card)';
-    const color = active ? sc.text : 'var(--c-border)';
-    const border = active ? `1.5px solid ${sc.text}` : '1.5px solid var(--c-border)';
-    return `<button class="status-toggle" style="background:${bg};color:${color};border:${border}" data-status-pick="${st}">${st}</button>`;
+    return `<button class="status-toggle" style="background:${active?sc.bg:'var(--c-bg-card)'};color:${active?sc.text:'var(--c-border)'};border:1.5px solid ${active?sc.text:'var(--c-border)'}" data-status-pick="${st}">${st}</button>`;
   }).join('');
 
+  const backBtn  = isEdit ? `<button class="nav-btn" id="go-back-detail">취소</button>` : `<button class="nav-btn" id="go-back">취소</button>`;
+  const saveBtn  = isEdit ? `<button class="add-confirm-btn" id="do-edit-save">✦ 저장하기</button>` : `<button class="add-confirm-btn" id="do-add">✦ 추가하기</button>`;
+
   return `
-    <div class="top-bar">
-      <button class="nav-btn" id="go-back">취소</button>
-    </div>
+    <div class="top-bar">${backBtn}</div>
     <div class="form-wrap">
       ${inputsHTML}
       <div class="form-group">
@@ -993,100 +976,21 @@ function renderAdd() {
         <label class="form-label">메모</label>
         <textarea class="form-input" placeholder="감상 메모를 적어봐요 ✎" data-form-key="memo">${esc(f.memo)}</textarea>
       </div>
-      <button class="add-confirm-btn" id="do-add">✦ 추가하기</button>
+      ${saveBtn}
     </div>
     <div class="spacer"></div>
   `;
 }
+function renderAdd()  { return renderForm('add');  }
+function renderEdit() { return renderForm('edit'); }
 
-// ── EDIT ──────────────────────────────────────────────
-function renderEdit() {
-  const f = state.form;
-  const fields = [
-    { label: '제목 *', key: 'title', placeholder: '작품 제목', type: 'text' },
-    { label: '서클명 *', key: 'circle', placeholder: '서클 이름', type: 'text' },
-    { label: '태그', key: 'tags', placeholder: '달달, 연상, 집착 (쉼표로 구분)', type: 'text' },
-    { label: '발매일', key: 'releaseDate', placeholder: '', type: 'date' },
-    { label: '구매일', key: 'purchaseDate', placeholder: '', type: 'date' },
-  ];
-  const inputsHTML = fields.map(({ label, key, placeholder, type }) => `
-    <div class="form-group">
-      <label class="form-label">${label}</label>
-      <input class="form-input" type="${type}" placeholder="${placeholder}" value="${esc(f[key])}" data-form-key="${key}" />
-    </div>`).join('');
-
-  const rjPreview = f.rjCode.trim()
-    ? `<div style="font-size:11px;color:var(--c-sub);margin-top:6px;padding-left:4px;word-break:break-all">https://www.dlsite.com/girls-touch/work/=/product_id/${esc(f.rjCode.trim().toUpperCase())}.html</div>` : '';
-
-  const statusBtns = ['미청취','청취중','청취완료'].map(st => {
-    const active = f.status === st;
-    const sc = STATUS_COLORS[st];
-    const bg = active ? sc.bg : 'var(--c-bg-card)';
-    const color = active ? sc.text : 'var(--c-border)';
-    const border = active ? `1.5px solid ${sc.text}` : '1.5px solid var(--c-border)';
-    return `<button class="status-toggle" style="background:${bg};color:${color};border:${border}" data-status-pick="${st}">${st}</button>`;
-  }).join('');
-
-  return `
-    <div class="top-bar">
-      <button class="nav-btn" id="go-back-detail">취소</button>
-    </div>
-    <div class="form-wrap">
-      ${inputsHTML}
-      <div class="form-group">
-        <label class="form-label">작품 번호 (RJ코드)</label>
-        <input class="form-input" type="text" placeholder="RJ360371" value="${esc(f.rjCode)}" data-form-key="rjCode" />
-        ${rjPreview}
-      </div>
-      <div class="form-group">
-        <label class="form-label">구매처 URL (DLsite 외 다른 곳)</label>
-        <input class="form-input" type="url" placeholder="https://booth.pm/..." value="${esc(f.purchaseLink)}" data-form-key="purchaseLink" />
-      </div>
-      <div class="form-group">
-        <label class="form-label">청취 상태</label>
-        <div class="status-toggle-row">${statusBtns}</div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">별점</label>
-        ${starsHTML(f.rating, 28, true, 'form')}
-      </div>
-      <div class="form-group">
-        <label class="form-label">메모</label>
-        <textarea class="form-input" placeholder="감상 메모를 적어봐요 ✎" data-form-key="memo">${esc(f.memo)}</textarea>
-      </div>
-      <button class="add-confirm-btn" id="do-edit-save">✦ 저장하기</button>
-    </div>
-    <div class="spacer"></div>
-  `;
-}
 
 // ── 카드 이벤트만 재연결 (검색 시 포커스 유지용) ────────
 function attachCardEvents(container) {
   container.querySelectorAll('[data-open]').forEach(card => {
     card.addEventListener('click', e => {
-      if (e.target.closest('[data-fav]')) return;
       if (e.target.closest('[data-star]')) return;
       setState({ selectedId: card.dataset.open, view: 'detail' });
-    });
-  });
-  container.querySelectorAll('[data-fav]').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const id = Number(btn.dataset.fav);
-      const cd = state.cds.find(c => String(c.id) === String(id));
-      if (cd) updateCD(id, { favorite: !cd.favorite });
-    });
-  });
-  container.querySelectorAll('[data-star]').forEach(star => {
-    star.addEventListener('click', e => {
-      e.stopPropagation();
-      const val = Number(star.dataset.star);
-      const ctx = star.dataset.starsCtx;
-      if (ctx && ctx.startsWith('card-')) {
-        const id = Number(ctx.replace('card-', ''));
-        const cd = state.cds.find(c => String(c.id) === String(id));
-        updateCD(id, { rating: val === cd.rating ? 0 : val });
-      }
     });
   });
 }
@@ -1132,44 +1036,8 @@ function attachEvents() {
       // 전체 재렌더 대신 카드 리스트만 업데이트 → 포커스 유지
       const cardList = document.querySelector('.card-list');
       if (cardList) {
-        const { cds, filterTag, filterStatus, filterRating, searchQuery } = state;
-        const filtered = cds.filter(cd => {
-          const matchTag = filterTag ? cd.tags.includes(filterTag) : true;
-          const matchStatus = filterStatus ? cd.status === filterStatus : true;
-          const matchRating = filterRating !== null ? cd.rating === filterRating : true;
-          const matchSearch = !searchQuery
-            || cd.title.toLowerCase().includes(searchQuery.toLowerCase())
-            || cd.circle.toLowerCase().includes(searchQuery.toLowerCase());
-          const matchStat = !state.selectedStat || state.selectedStat === 'all'
-            || (state.selectedStat === 'done' && cd.status === '청취완료')
-            || (state.selectedStat === 'fav' && cd.favorite);
-          return matchTag && matchStatus && matchRating && matchSearch && matchStat;
-        });
-        if (filtered.length === 0) {
-          cardList.innerHTML = `<div class="empty">작품이 없어요 <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--c-sub)" stroke="none" style="display:inline;vertical-align:middle;margin-left:2px"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div>`;
-        } else {
-          cardList.innerHTML = filtered.map(cd => {
-            const sc = STATUS_COLORS[cd.status];
-            const visibleTags = cd.tags.slice(0,3).map(t=>`<span class="card-tag">#${t}</span>`).join('');
-            const more = cd.tags.length > 3 ? `<span class="card-tag">+${cd.tags.length-3}</span>` : '';
-            return `
-              <div class="card" data-open="${cd.id}">
-                <div class="card-accent" style="background:${gradientFor(cd.id)}"></div>
-                <div class="card-info">
-                  <div class="card-title">${esc(cd.title)}</div>
-                  <div class="card-circle">✦ ${esc(cd.circle)}</div>
-                  <div class="card-tags">${visibleTags}${more}</div>
-                  <div style="margin-top:5px">${starsHTML(cd.rating, 13, true, `card-${cd.id}`)}</div>
-                </div>
-                <div class="card-right">
-                  <button class="card-fav" style="color:${cd.favorite?'var(--c-primary)':'var(--c-border)'}" data-fav="${cd.id}">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="${cd.favorite?'var(--c-primary)':'none'}" stroke="${cd.favorite?'var(--c-primary)':'var(--c-border)'}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
-                  </button>
-                  <span class="card-status" style="background:${sc.bg};color:${sc.text}">${cd.status}</span>
-                </div>
-              </div>`;
-          }).join('');
-        }
+        const filtered = filterCDs(state.cds);
+        cardList.innerHTML = filtered.length === 0 ? EMPTY_HTML : filtered.map(cardHTML).join('');
         // 새로 생긴 카드 이벤트 재연결
         attachCardEvents(cardList);
       }
@@ -1205,38 +1073,18 @@ function attachEvents() {
   // 카드 열기
   app.querySelectorAll('[data-open]').forEach(card => {
     card.addEventListener('click', e => {
-      // 즐겨찾기 버튼 클릭 시 카드 열기 방지
-      if (e.target.closest('[data-fav]')) return;
       if (e.target.closest('[data-star]')) return;
       setState({ selectedId: card.dataset.open, view: 'detail' });
     });
   });
 
-  // 즐겨찾기
-  app.querySelectorAll('[data-fav]').forEach(btn => {
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const id = Number(btn.dataset.fav);
-      const cd = state.cds.find(c => String(c.id) === String(id));
-      if (cd) updateCD(id, { favorite: !cd.favorite });
-    });
-  });
 
-  // 별점
+  // 별점 (폼에서만 편집 가능)
   app.querySelectorAll('[data-star]').forEach(star => {
     star.addEventListener('click', e => {
       e.stopPropagation();
-      const val = Number(star.dataset.star);
-      const ctx = star.dataset.starsCtx;
-      if (ctx && ctx.startsWith('card-')) {
-        const id = Number(ctx.replace('card-', ''));
-        const cd = state.cds.find(c => String(c.id) === String(id));
-        updateCD(id, { rating: val === cd.rating ? 0 : val });
-      } else if (ctx && ctx.startsWith('detail-')) {
-        const id = Number(ctx.replace('detail-', ''));
-        const cd = state.cds.find(c => String(c.id) === String(id));
-        updateCD(id, { rating: val === cd.rating ? 0 : val });
-      } else if (ctx === 'form') {
+      if (star.dataset.starsCtx === 'form') {
+        const val = Number(star.dataset.star);
         state.form.rating = val === state.form.rating ? 0 : val;
         render();
       }
@@ -1275,13 +1123,18 @@ function esc(str) {
 
 // ── 초기 렌더 ─────────────────────────────────────────
 loadSavedTheme();
+state._loading = true;
 render();
 (async () => {
   try {
     const cds = await dbLoadCDs();
     state.cds = cds;
+  } catch(e) {
+    state.cds = [];
+  } finally {
+    state._loading = false;
     render();
-  } catch(e) {}
+  }
 })();
 
 // ── Service Worker 등록 ───────────────────────────────
