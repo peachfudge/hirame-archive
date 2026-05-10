@@ -189,7 +189,8 @@ const GRADIENT_OFFSETS = [
   ['var(--c-sub)', 'var(--c-bg-chip)'],
 ];
 const gradientFor = (id) => {
-  const num = typeof id === 'number' ? id : Number(String(id).slice(-6));
+  const s = String(id);
+  const num = s.charCodeAt(s.length - 1) + s.charCodeAt(s.length - 2);
   const [a, b] = GRADIENT_OFFSETS[num % GRADIENT_OFFSETS.length];
   return `linear-gradient(135deg, ${a} 0%, ${b} 100%)`;
 };
